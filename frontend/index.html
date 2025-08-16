@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" x-data="taskApp()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@unocss/reset/tailwind.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Task List</h1>
+        
+        <!-- Loading State -->
+        <div x-show="loading" class="text-center py-4">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+        
+        <!-- Error State -->
+        <div x-show="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <span x-text="error"></span>
+        </div>
+        
+        <!-- Success Message -->
+        <div x-show="success" class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            <span x-text="success"></span>
+        </div>
+        
+        <!-- Task List -->
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-700">Tasks</h2>
+            </div>
+            
+            <div class="divide-y divide-gray-200">
+                <template x-for="task in tasks" :key="task.id">
+                    <div class="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900" x-text="task.title"></h3>
+                            <p class="text-gray-600 mt-1" x-text="task.description"></p>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2"
+                                  :class="{
+                                      'bg-green-100 text-green-800': task.status === 'completed',
+                                      'bg-yellow-100 text-yellow-800': task.status === 'pending',
+                                      'bg-blue-100 text-blue-800': task.status === 'in-progress'
+                                  }"
+                                  x-text="task.status">
+                            </span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button @click="editTask(task)"
+                                    class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">
+                                Edit
+                            </button>
+                            <button @click="completeTask(task.id)"
+                                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                    x-show="task.status !== 'completed'">
+                                Complete
+                            </button>
+                            <button @click="deleteTask(task.id)"
+                                    class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                
+                <!-- Empty State -->
+                <div x-show="tasks.length === 0 && !loading" class="px-6 py-12 text-center">
+                    <p class="text-gray-500">No tasks found. Create your first task!</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add Task Form -->
+        <div class="mt-8 bg-white shadow-md rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Task</h2>
+            <form @submit.prevent="addTask" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" x-model="newTask.title" required
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea x-model="newTask.description" rows="3"
+                              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Status</label>
+                    <select x-model="newTask.status"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <button type="submit"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Add Task
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function taskApp() {
+            return {
+                tasks: [],
+                loading: false,
+                error: null,
+                success: null,
+                newTask: {
+                    title: '',
+                    description: '',
+                    status: 'pending'
+                },
+                
+                init() {
+                    this.fetchTasks();
+                },
+                
+                async fetchTasks() {
+                    this.loading = true;
+                    this.error = null;
+                    
+                    try {
+                        const response = await fetch('/api/tasks', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch tasks');
+                        }
+                        
+                        const data = await response.json();
+                        this.tasks = data.tasks || [];
+                    } catch (err) {
+                        this.error = err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async addTask() {
+                    try {
+                        const response = await fetch('/api/tasks', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(this.newTask)
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to create task');
+                        }
+                        
+                        this.success = 'Task created successfully!';
+                        setTimeout(() => this.success = null, 3000);
+                        
+                        // Reset form
+                        this.newTask = {
+                            title: '',
+                            description: '',
+                            status: 'pending'
+                        };
+                        
+                        // Refresh task list
+                        await this.fetchTasks();
+                    } catch (err) {
+                        this.error = err.message;
+                        setTimeout(() => this.error = null, 3000);
+                    }
+                },
+                
+                async editTask(task) {
+                    const newTitle = prompt('Enter new title:', task.title);
+                    const newDescription = prompt('Enter new description:', task.description);
+
+                    if (newTitle === null || newDescription === null) {
+                        return; // User cancelled
+                    }
+
+                    const updatedTask = {
+                        ...task,
+                        title: newTitle,
+                        description: newDescription
+                    };
+
+                    try {
+                        const response = await fetch(`/api/task/${task.id}/update`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(updatedTask)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to update task');
+                        }
+
+                        this.success = 'Task updated successfully!';
+                        setTimeout(() => this.success = null, 3000);
+
+                        await this.fetchTasks();
+                    } catch (err) {
+                        this.error = err.message;
+                        setTimeout(() => this.error = null, 3000);
+                    }
+                },
+                
+                async completeTask(id) {
+                    try {
+                        const response = await fetch(`/api/task/${id}/complete`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to complete task');
+                        }
+                        
+                        this.success = 'Task completed successfully!';
+                        setTimeout(() => this.success = null, 3000);
+                        
+                        // Update task status locally
+                        const task = this.tasks.find(t => t.id === id);
+                        if (task) {
+                            task.status = 'completed';
+                        }
+                    } catch (err) {
+                        this.error = err.message;
+                        setTimeout(() => this.error = null, 3000);
+                    }
+                },
+                
+                async deleteTask(id) {
+                    if (!confirm('Are you sure you want to delete this task?')) {
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`/api/task/${id}/delete`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to delete task');
+                        }
+                        
+                        this.success = 'Task deleted successfully!';
+                        setTimeout(() => this.success = null, 3000);
+                        
+                        // Remove task from local array
+                        this.tasks = this.tasks.filter(t => t.id !== id);
+                    } catch (err) {
+                        this.error = err.message;
+                        setTimeout(() => this.error = null, 3000);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
